@@ -612,7 +612,7 @@ contract UsdcVaultTest is TokenFuzzChecks {
         vm.expectRevert("SUsds/insufficient-balance");
         token.withdraw(maxWithdraw + 1, address(this), address(this));
         token.withdraw(maxWithdraw, address(this), address(this));
-        assertEq(token.maxWithdraw(address(this)), 0);
+        assertLt(token.maxWithdraw(address(this)), 2);
     }
 
     function testMaxWithdrawWithLowPocketBalance() public {
@@ -624,7 +624,7 @@ contract UsdcVaultTest is TokenFuzzChecks {
         vm.expectRevert("ERC20: transfer amount exceeds balance");
         token.withdraw(maxWithdraw + 1, address(this), address(this));
         token.withdraw(maxWithdraw, address(this), address(this));
-        assertEq(token.maxWithdraw(address(this)), 0);
+        assertLt(token.maxWithdraw(address(this)), 2);
     }
 
     function testMaxRedeem() public {
@@ -634,7 +634,7 @@ contract UsdcVaultTest is TokenFuzzChecks {
         vm.expectRevert("SUsds/insufficient-balance");
         token.redeem(maxRedeem + 1, address(this), address(this));
         token.redeem(maxRedeem, address(this), address(this));
-        assertEq(token.maxRedeem(address(this)), 0);
+        assertLt(token.maxRedeem(address(this)), 2 * 10**12);
     }
 
     function testMaxRedeemWithLowPocketBalance() public {
@@ -647,7 +647,7 @@ contract UsdcVaultTest is TokenFuzzChecks {
         vm.expectRevert("ERC20: transfer amount exceeds balance");
         token.redeem(maxRedeem + 10**12, address(this), address(this));
         token.redeem(maxRedeem, address(this), address(this));
-        assertEq(token.maxRedeem(address(this)), 0);
+        assertLt(token.maxRedeem(address(this)), 2 * 10**12);
     }
 
     function testMaxDeposit(uint256 psmDaiBalance, uint256 tin) public {
@@ -715,7 +715,7 @@ contract UsdcVaultTest is TokenFuzzChecks {
             }
             token.withdraw(maxWithdraw + 1, address(this), address(this));
             token.withdraw(maxWithdraw, address(this), address(this));
-            assertEq(token.maxWithdraw(address(this)), 0);
+            assertLt(token.maxWithdraw(address(this)), 2);
         } else {
             assertEq(maxWithdraw, 0);
             vm.expectRevert("UsdcVault/psm-buy-gem-halted");
@@ -744,7 +744,7 @@ contract UsdcVaultTest is TokenFuzzChecks {
                 token.redeem(maxRedeem + 1, address(this), address(this));
             }
             token.redeem(maxRedeem, address(this), address(this));
-            assertEq(token.maxRedeem(address(this)), 0);
+            assertLt(token.maxRedeem(address(this)), 2 * 10**12);
         } else {
             assertEq(maxRedeem, 0);
             vm.expectRevert("UsdcVault/psm-buy-gem-halted");

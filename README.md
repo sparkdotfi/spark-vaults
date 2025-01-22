@@ -43,11 +43,17 @@ For example, the following manual validations will be required:
 - Verify that calling `psm()` on the proxy returns the expected `UsdsPsmWrapper` address.
 - Verify that calling `susds()` on the proxy returns the expected `sUsds` address.
 
+## L2 Version
+
+This repository also contains a version of the vault for L2 deployments. It interacts with the Spark [PSM3 contract](https://github.com/marsfoundation/spark-psm/blob/master/src/PSM3.sol).
+The sUSDS and PSM getters that exist on the mainnet version are omitted here on purpose. The conversion rate can be fetched from the rate provider.
+Psm referral codes are passed as 0. It is assumed that only deposit referral codes will be tracked when using the vault.
+
 ## General Notes
 
 - In case the PSM has outflow fees, the escape hatch should not be viewed as a means to avoid them, as it does not use the PSM and does not swap to USDC.
 - The available liquidity for the different operations (except `exit`) is limited by the PSM funds. It is taken into account in the `max*` functions. This is especially important for `withdraw` and `redeem`, which rely on USDC availability.
 - As when working directly with the PSM, front-runners can cause operations to revert by swapping or withdrawing liquidity. This can be partly mitigated by using private transactions, when available. Also fees could be added, if supported by the PSM (initially relevant to mainnet). In case this becomes a severe problem, the escape hatch mechanism can be used by the user to extract their funds in sUSDS form.
 - As in the ERC4626 spec, the functions that adhere to its format assume that slippage protection, if needed, is added in a separate layer.
-- It is assumed that if the PSM funds are migrated, upgrading the vault will be considered as part of that process (and in the same spell if needed).
+- It is assumed that if the PSM funds are migrated and/or the PSM to be used changes, upgrading the vault will be considered as part of that process (and in the same spell if needed). That process is assumed to be examined carefully.
 - The view functions assume that the system is set up correctly and works as intended. They do not check things like allowances or unexpected token implementation changes.

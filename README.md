@@ -1,6 +1,6 @@
 # Spark USDC Vault
 
-An ERC4626-compliant tokenized vault contract for USDC, which handles USDC deposits by converting USDC to USDS using [dss-lite-psm](https://github.com/makerdao/dss-lite-psm) and depositing USDS into [sUSDS](https://github.com/makerdao/sdai/tree/susds). To handle USDC withdrawals, the vault withdraws USDS from sUSDS and converts USDS back to USDC using dss-lite-psm.
+An ERC4626-compliant tokenized vault contract for USDC, which handles USDC deposits by converting USDC to USDS using [dss-lite-psm](https://github.com/makerdao/dss-lite-psm) (through the [UsdsPsmWrapper](https://github.com/makerdao/usds-wrappers/blob/dev/src)) and depositing USDS into [sUSDS](https://github.com/makerdao/sdai/tree/susds). To handle USDC withdrawals, the vault withdraws USDS from sUSDS and converts USDS back to USDC using dss-lite-psm.
 
 ## Deposits
 

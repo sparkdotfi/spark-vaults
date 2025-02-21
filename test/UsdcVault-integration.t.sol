@@ -44,7 +44,9 @@ interface SUsdsLike is GemAbstract {
     function convertToShares(uint256) external view returns (uint256);
     function convertToAssets(uint256) external view returns (uint256);
     function previewDeposit(uint256) external view returns (uint256);
+    function previewMint(uint256) external view returns (uint256);
     function previewWithdraw(uint256) external view returns (uint256);
+    function previewRedeem(uint256) external view returns (uint256);
 }
 
 contract UsdcVault2 is UUPSUpgradeable {
@@ -412,11 +414,11 @@ contract UsdcVaultTest is TokenFuzzChecks {
         deposited = bound(deposited, 0, token.maxDeposit(address(this)));
         deal(address(usdc), address(this), deposited);
 
-        uint256 snap = vm.snapshot();
+        uint256 snap = vm.snapshotState();
         token.deposit(deposited, address(0x222));
         vm.warp(block.timestamp + 30 * 365 days);
         withdrawn = bound(withdrawn, 0, token.maxWithdraw(address(0x222)));
-        vm.revertTo(snap);
+        vm.revertToState(snap);
 
         _checkDepositWithdraw(deposited, withdrawn);
     }
@@ -517,11 +519,11 @@ contract UsdcVaultTest is TokenFuzzChecks {
         minted = bound(minted, 0, token.maxMint(address(this))); 
         deal(address(usdc), address(this), token.previewMint(minted));
 
-        uint256 snap = vm.snapshot();
+        uint256 snap = vm.snapshotState();
         token.mint(minted, address(0x222));
         vm.warp(block.timestamp + 30 * 365 days);
         redeemed = bound(redeemed, 0, token.maxRedeem(address(0x222)));
-        vm.revertTo(snap);
+        vm.revertToState(snap);
 
         _checkMintRedeem(minted, redeemed);
     }
@@ -695,23 +697,26 @@ contract UsdcVaultTest is TokenFuzzChecks {
         }
     }
 
-    function testMaxWithdraw(uint256 depositAmount, uint256 tout, uint256 warp) public {
+    function testMaxWithdraw(uint256 userDeposit, uint256 psmUsdc, uint256 tout, uint256 warp) public {
+        psmUsdc %= 1_000_000_000 * 10**6;
+        deal(address(usdc), address(pocket), psmUsdc);
+        deal(address(dss.dai), psm, 1_000_000_000 ether);
         if (tout < type(uint256).max) tout %= WAD;
-        depositAmount = bound(depositAmount, 0, token.maxDeposit(address(this)));
+        userDeposit = bound(userDeposit, 0, token.maxDeposit(address(this)));
         warp %= 365 days;
 
         vm.prank(pauseProxy); PsmLike(psm).file("tout", tout);
-        deal(address(usdc), address(this), depositAmount);
-        token.deposit(depositAmount, address(this));
+        deal(address(usdc), address(this), userDeposit);
+        uint256 userShares = token.deposit(userDeposit, address(this));
         vm.warp(block.timestamp + warp);
     
         uint256 maxWithdraw = token.maxWithdraw(address(this));
 
         if (tout < type(uint256).max) {
-            if (maxWithdraw < usdc.balanceOf(pocket)) {
-                vm.expectRevert("SUsds/insufficient-balance");
+            if (token.previewWithdraw(maxWithdraw + 1) > userShares) {
+                vm.expectRevert("SUsds/insufficient-balance"); // insufficient susds balance in vault
             } else {
-                vm.expectRevert("ERC20: transfer amount exceeds balance");
+                vm.expectRevert("ERC20: transfer amount exceeds balance"); // insufficient usdc balance in psm's pocket
             }
             token.withdraw(maxWithdraw + 1, address(this), address(this));
             token.withdraw(maxWithdraw, address(this), address(this));
@@ -723,14 +728,84 @@ contract UsdcVaultTest is TokenFuzzChecks {
         }
     }
 
-    function testMaxRedeem(uint256 depositAmount, uint256 tout, uint256 warp) public {
+    function testMaxWithdrawWhenAssetsDueEqualsPocketBalanceSingleUser(uint256 userDeposit, uint256 tout, uint256 warp) public {
+        tout %= WAD;
+        deal(address(dss.dai), psm, 1_000_000_000 ether);
+        userDeposit = bound(userDeposit, 0, token.maxDeposit(address(this)));
+        warp %= 365 days;
+        vm.warp(block.timestamp + warp);
+
+        vm.prank(pauseProxy); PsmLike(psm).file("tout", tout);
+        deal(address(usdc), address(this), userDeposit);
+        uint256 userShares = token.deposit(userDeposit, address(this));
+
+        // given userShares, compute the usdcPocketBalance equivalent to these user shares so we end up with the same values for the `min` in maxWithdraw
+        uint256 usdcDue = susds.previewRedeem(userShares) * 10**6 / (WAD + tout);
+        uint256 usdcPocketBalance = usdcDue;
+
+        deal(address(usdc), address(pocket), usdcPocketBalance);
+
+        uint256 maxWithdraw = token.maxWithdraw(address(this));
+        assertEq(maxWithdraw, usdcPocketBalance);
+
+        if (token.previewWithdraw(maxWithdraw + 1) > userShares) {
+            vm.expectRevert("SUsds/insufficient-balance");  // insufficient susds balance in vault
+        } else {
+            vm.expectRevert("ERC20: transfer amount exceeds balance"); // insufficient usdc balance in psm's pocket
+        }
+        token.withdraw(maxWithdraw + 1, address(this), address(this));
+        token.withdraw(maxWithdraw, address(this), address(this));
+        assertLt(token.maxWithdraw(address(this)), 2);
+    }
+
+    function testMaxWithdrawWhenAssetsDueEqualsPocketBalanceMultipleUsers(uint256 userDeposit, uint256 otherDeposit, uint256 tout, uint256 warp) public {
+        vm.assume(address(this) != address(0x222));
+        tout %= WAD;
+        deal(address(dss.dai), psm, 1_000_000_000 ether);
+        userDeposit = bound(userDeposit, 0, token.maxDeposit(address(this)) / 2);
+        otherDeposit = bound(otherDeposit, 1, token.maxDeposit(address(0x222)) / 2);
+        warp %= 365 days;
+        vm.warp(block.timestamp + warp);
+
+        vm.prank(pauseProxy); PsmLike(psm).file("tout", tout);
+        deal(address(usdc), address(this), userDeposit);
+        uint256 userShares = token.deposit(userDeposit, address(this));
+        deal(address(usdc), address(0x222), otherDeposit);
+        vm.startPrank(address(0x222));
+        usdc.approve(address(token), type(uint256).max);
+        uint256 otherShares = token.deposit(otherDeposit, address(0x222));
+        vm.stopPrank();
+
+        // given userShares, compute the usdcPocketBalance equivalent to these user shares so we end up with the same values for the `min` in maxWithdraw
+        uint256 usdcDue = susds.previewRedeem(userShares) * 10**6 / (WAD + tout);
+        uint256 usdcPocketBalance = usdcDue;
+
+        deal(address(usdc), address(pocket), usdcPocketBalance);
+
+        uint256 maxWithdraw = token.maxWithdraw(address(this));
+        assertEq(maxWithdraw, usdcPocketBalance);
+
+        uint256 susdsAmt = token.previewWithdraw(maxWithdraw + 1);
+        if (susdsAmt > userShares + otherShares) {
+            vm.expectRevert("SUsds/insufficient-balance");  // insufficient susds balance in vault
+        } else if (susdsAmt > userShares) {
+            vm.expectRevert("UsdcVault/insufficient-balance"); // insufficient vault shares to burn
+        } else {
+            vm.expectRevert("ERC20: transfer amount exceeds balance"); // insufficient usdc balance in psm's pocket
+        }
+        token.withdraw(maxWithdraw + 1, address(this), address(this));
+        token.withdraw(maxWithdraw, address(this), address(this));
+        assertLt(token.maxWithdraw(address(this)), 2);
+    }
+
+    function testMaxRedeem(uint256 userDeposit, uint256 tout, uint256 warp) public {
         if (tout < type(uint256).max) tout %= WAD;
-        depositAmount = bound(depositAmount, 0, token.maxDeposit(address(this)));
+        userDeposit = bound(userDeposit, 0, token.maxDeposit(address(this)));
         warp %= 365 days;
 
         vm.prank(pauseProxy); PsmLike(psm).file("tout", tout);
-        deal(address(usdc), address(this), depositAmount);
-        uint256 shares = token.deposit(depositAmount, address(this));
+        deal(address(usdc), address(this), userDeposit);
+        uint256 shares = token.deposit(userDeposit, address(this));
         vm.warp(block.timestamp + warp);
     
         uint256 maxRedeem = token.maxRedeem(address(this));
@@ -750,6 +825,61 @@ contract UsdcVaultTest is TokenFuzzChecks {
             vm.expectRevert("UsdcVault/psm-buy-gem-halted");
             token.redeem(0, address(this), address(this));
         }
+    }
+
+    function testMaxRedeemWhenAssetsDueEqualsPocketBalanceSingleUser(uint256 usdcPocketBalance, uint256 tout, uint256 warp) public {
+        tout %= WAD;
+        usdcPocketBalance = bound(usdcPocketBalance, 0, usds.balanceOf(address(susds)) * 10**6 / (WAD + tout));
+        warp %= 365 days;
+        vm.warp(block.timestamp + warp);
+        vm.prank(pauseProxy); PsmLike(psm).file("tout", tout);
+        deal(address(usdc), address(pocket), usdcPocketBalance);
+
+        // given usdcPocketBalance, compute the user shares equivalent so we end up with the same values for the `min` in maxRedeem
+        uint256 userShares = susds.previewWithdraw(usdcPocketBalance * 10**12 + usdcPocketBalance * tout / WAD);
+        vm.assume(userShares > 0);
+
+        deal(address(token), address(this), userShares); // user gets same token shares as susds shares
+        deal(address(susds), address(token), userShares); // token escrows susds for redemptions
+
+        uint256 maxRedeem = token.maxRedeem(address(this));
+        assertEq(maxRedeem, userShares);
+
+        vm.expectRevert("SUsds/insufficient-balance"); // insufficient susds balance in vault
+        token.redeem(maxRedeem + 1, address(this), address(this));
+        token.redeem(maxRedeem, address(this), address(this));
+        assertLt(token.maxRedeem(address(this)), 2 * 10**12);
+    }
+
+
+    function testMaxRedeemWhenAssetsDueEqualsPocketBalanceMultipleUsers(uint256 usdcPocketBalance, uint256 otherShares, uint256 tout, uint256 warp) public {
+        tout %= WAD;
+        usdcPocketBalance = bound(usdcPocketBalance, 0, usds.balanceOf(address(susds)) * 10**6 / (WAD + tout));
+        warp %= 365 days;
+        vm.warp(block.timestamp + warp);
+        vm.prank(pauseProxy); PsmLike(psm).file("tout", tout);
+        deal(address(usdc), address(pocket), usdcPocketBalance);
+
+        // given usdcPocketBalance, compute the user shares equivalent so we end up with the same values for the `min` in maxRedeem
+        uint256 userShares = susds.previewWithdraw(usdcPocketBalance * 10**12 + usdcPocketBalance * tout / WAD);
+        vm.assume(userShares > 0);
+        otherShares = bound(otherShares, 1, susds.totalSupply() - userShares);
+
+        deal(address(token), address(this), userShares); // user gets same token shares as susds shares
+        deal(address(token), address(0x222), otherShares);
+        deal(address(susds), address(token), userShares + otherShares); // token escrows susds for redemptions
+
+        uint256 maxRedeem = token.maxRedeem(address(this));
+        assertEq(maxRedeem, userShares);
+
+        uint256 excessiveRedeem = maxRedeem + otherShares + 1;
+        vm.expectRevert("SUsds/insufficient-balance"); // insufficient susds balance in vault
+        token.redeem(excessiveRedeem, address(this), address(this));
+        excessiveRedeem = maxRedeem + otherShares;
+        vm.expectRevert("UsdcVault/insufficient-balance"); // insufficient vault shares to burn
+        token.redeem(excessiveRedeem, address(this), address(this));
+        token.redeem(maxRedeem, address(this), address(this));
+        assertLt(token.maxRedeem(address(this)), 2 * 10**12);
     }
 
     function testExit() public {

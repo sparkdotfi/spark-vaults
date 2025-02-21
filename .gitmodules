@@ -10,3 +10,6 @@
 [submodule "lib/token-tests"]
 	path = lib/token-tests
 	url = https://github.com/makerdao/token-tests
+[submodule "lib/erc4626-tests"]
+	path = lib/erc4626-tests
+	url = https://github.com/a16z/erc4626-tests

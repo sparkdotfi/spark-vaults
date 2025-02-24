@@ -740,7 +740,7 @@ contract UsdcVaultTest is TokenFuzzChecks {
         uint256 userShares = token.deposit(userDeposit, address(this));
 
         // given userShares, compute the usdcPocketBalance equivalent to these user shares so we end up with the same values for the `min` in maxWithdraw
-        uint256 usdcDue = susds.previewRedeem(userShares) * 10**6 / (WAD + tout);
+        uint256 usdcDue = token.previewRedeem(userShares);
         uint256 usdcPocketBalance = usdcDue;
 
         deal(address(usdc), address(pocket), usdcPocketBalance);
@@ -777,7 +777,7 @@ contract UsdcVaultTest is TokenFuzzChecks {
         vm.stopPrank();
 
         // given userShares, compute the usdcPocketBalance equivalent to these user shares so we end up with the same values for the `min` in maxWithdraw
-        uint256 usdcDue = susds.previewRedeem(userShares) * 10**6 / (WAD + tout);
+        uint256 usdcDue = token.previewRedeem(userShares);
         uint256 usdcPocketBalance = usdcDue;
 
         deal(address(usdc), address(pocket), usdcPocketBalance);
@@ -836,7 +836,7 @@ contract UsdcVaultTest is TokenFuzzChecks {
         deal(address(usdc), address(pocket), usdcPocketBalance);
 
         // given usdcPocketBalance, compute the user shares equivalent so we end up with the same values for the `min` in maxRedeem
-        uint256 userShares = susds.previewWithdraw(usdcPocketBalance * 10**12 + usdcPocketBalance * tout / WAD);
+        uint256 userShares = token.previewWithdraw(usdcPocketBalance);
         vm.assume(userShares > 0);
 
         deal(address(token), address(this), userShares); // user gets same token shares as susds shares
@@ -861,7 +861,7 @@ contract UsdcVaultTest is TokenFuzzChecks {
         deal(address(usdc), address(pocket), usdcPocketBalance);
 
         // given usdcPocketBalance, compute the user shares equivalent so we end up with the same values for the `min` in maxRedeem
-        uint256 userShares = susds.previewWithdraw(usdcPocketBalance * 10**12 + usdcPocketBalance * tout / WAD);
+        uint256 userShares = token.previewWithdraw(usdcPocketBalance);
         vm.assume(userShares > 0);
         otherShares = bound(otherShares, 1, susds.totalSupply() - userShares);
 
@@ -921,5 +921,4 @@ contract UsdcVaultTest is TokenFuzzChecks {
         assertEq(token.balanceOf(address(0x222)), initialReceiverShares + mintedShares - exitedShares);
         assertEq(susds.balanceOf(address(0x333)), initialExitedReceiverSUsds + exitedShares);
     }
-
 }

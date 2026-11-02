@@ -57,3 +57,19 @@ The sUSDS and PSM getters that exist on the mainnet version are omitted here on 
 - It is assumed that if the PSM funds are migrated and/or the PSM to be used changes, upgrading the vault will be considered as part of that process (and in the same spell if needed). That process is assumed to be examined carefully.
 - The view functions assume that the system is set up correctly and works as intended. They do not check things like allowances or unexpected token implementation changes.
 - L1 sUSDS and L2 PSM referral codes are passed as 0. It is assumed that only deposit referral codes will be tracked when using the vault.
+
+## Audits
+
+Audit reports are hosted on the auditors' public portfolio pages:
+
+| Auditor | Report | Date |
+| --- | --- | --- |
+| ChainSecurity | [Spark Vaults](https://www.chainsecurity.com/security-audit/spark-vaults/) | 2025-01-24 |
+
+ChainSecurity reports are cumulative: each portfolio page hosts the latest version of the report, which covers all previously reviewed versions.
+
+### Other reports
+
+The following reports are not available on an auditor portfolio page and are kept in this repository:
+
+- [Cantina (20250226-cantina-audit.pdf)](./audits/20250226-cantina-audit.pdf)
